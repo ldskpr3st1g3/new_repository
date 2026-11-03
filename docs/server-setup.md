@@ -53,3 +53,13 @@
       -subj "/CN=devops.local" \
       -addext "subjectAltName=DNS:devops.local"
     ```
+## 9. Контейнеризация
+- **Способ установки и версия Docker Engine:** установлен из официального APT-репозитория Docker (`https://download.docker.com/linux/ubuntu`, пакеты `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`). Актуальная версия проверяется командами `docker version` и `docker compose version`.
+- **Участники группы `docker`:** `devops` (добавлен командой `sudo usermod -aG docker devops`).
+- **Расположение проекта на сервере:** `/home/devops/app` (`~/app`), доставляется с хостовой машины средствами `rsync` с исключением файла `.env` (`--exclude=.env`).
+- **Расположение файла `.env` и его права:** `/home/devops/app/.env`, владелец `devops:devops`, права доступа `600` (`-rw-------`). Создаётся только на сервере из шаблона `.env.example` с генерацией пароля `openssl rand -hex 16`, в Git-репозиторий не включается.
+- **Публикуемые порты и адреса:**
+- Сервис `app` (Gunicorn/Flask): опубликован только на локальном петлевом интерфейсе `127.0.0.1:5000:5000` (прямой доступ из внешней сети закрыт). Inside контейнера процесс работает от системного пользователя `app` (без прав `root`).
+- Сервис `db` (PostgreSQL `postgres:16-alpine`): порт `5432` на хостовую машину не публикуется; взаимодействие с `app` происходит внутри изолированной пользовательской сети `backend` (`app_backend`) по DNS-имени `db`.
+- **Именованные тома:** `db_data` (полное имя тома Docker: `app_db_data`), монтируется в `/var/lib/postgresql/data` контейнера `db` для сохранения данных между пересозданиями контейнеров.
+- **Конфигурация обратного прокси-сервера:** в блоке `server` (порт `443 ssl`) файла `/etc/nginx/sites-available/devops-site` настроено расположение `location /app/`, перенаправляющее запросы на `http://127.0.0.1:5000/` (`proxy_pass`) с передачей заголовков `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`.
