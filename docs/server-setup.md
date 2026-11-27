@@ -63,3 +63,22 @@
 - Сервис `db` (PostgreSQL `postgres:16-alpine`): порт `5432` на хостовую машину не публикуется; взаимодействие с `app` происходит внутри изолированной пользовательской сети `backend` (`app_backend`) по DNS-имени `db`.
 - **Именованные тома:** `db_data` (полное имя тома Docker: `app_db_data`), монтируется в `/var/lib/postgresql/data` контейнера `db` для сохранения данных между пересозданиями контейнеров.
 - **Конфигурация обратного прокси-сервера:** в блоке `server` (порт `443 ssl`) файла `/etc/nginx/sites-available/devops-site` настроено расположение `location /app/`, перенаправляющее запросы на `http://127.0.0.1:5000/` (`proxy_pass`) с передачей заголовков `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`.
+## 10. Ansible
+- **Расположение проекта:** `ansible/` (управляющий узел — WSL Ubuntu, управляемый узел — `devops-vm`, `192.168.56.101`)
+- **Inventory и учётные записи:**
+- `ansible/inventory/bootstrap.ini` — первичный запуск от `student` по паролю (`--ask-pass --ask-become-pass`)
+- `ansible/inventory/prod.ini` — последующие запуски от `devops` по SSH-ключу `~/.ssh/devops_vm` без интерактивного ввода
+- **Роли и ответственность:**
+- `base` — проверка Ubuntu 24.04 amd64, базовые пакеты (`python3-debian`, `python3-requests`), официальный репозиторий и служба Docker Engine
+- `ssh` — пользователь `devops`, установка SSH-ключа, `NOPASSWD` sudoers, hardening SSH (`00-ansible-hardening.conf`), настройка UFW (22, 80)
+- `nginx` — установка Nginx, reverse proxy на `127.0.0.1:5000`, отключение default site, валидация `nginx -t` перед reload
+- `app` — добавление `devops` в группу `docker`, загрузка образа GHCR по SHA, запуск контейнера на `127.0.0.1:5000`, проверка `/health`
+- **Параметры развёртывания:**
+- Образ GHCR: `ghcr.io/ldskpr3st1g3/devops-ci-app`
+- Полный SHA: `c18d8237ddd7b4175ae2d0254ed402697d20ce90`
+- Порт контейнера: `127.0.0.1:5000:5000` (внешний доступ через Nginx на порту `80`)
+- Health endpoint: `http://127.0.0.1:5000/health` (внешний: `http://192.168.56.101/health`)
+- **Основные команды (из каталога `ansible/`):**
+- Первичный запуск: `ansible-playbook -i inventory/bootstrap.ini site.yml --ask-pass --ask-become-pass`
+- Повторный деплой: `ansible-playbook site.yml`
+- Read-only аудит: `ansible-playbook verify.yml`
